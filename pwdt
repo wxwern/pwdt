@@ -1,0 +1,80 @@
+#!/usr/bin/env bash
+
+#
+# pwdt - Print Working Directory and Transfer utility
+#
+# Helper for helping transfer working directory from one shell to another.
+#
+# Uses pwd to print working directory to a temporary file, which is read by
+# another shell. Tested in bash and zsh.
+#
+# ---USAGE---
+# 1.  Run "pwdt" to begin a transfer from a target shell.
+# 2a. Launch a new shell while a transfer is in progress to receive working directory.
+# 2b. Run "pwdt" in a different shell while a transfer is in progress to receive working directory.
+# -----------
+#
+# ---SETUP---
+# Source this file in your *rc file.
+# For example, in ~/.bashrc:
+#   source /path/to/pwdt.sh
+# -----------
+#
+pwdt() {
+    # transfer if in progress
+    if [[ -f ~/.pwdtmp ]]; then
+        PWDTMP="$(cat ~/.pwdtmp)"
+        echo "Working directory transfer received."
+        cd "$PWDTMP"
+        rm ~/.pwdtmp
+        return 0
+    fi
+
+    # prepare for transfer
+    pwd > ~/.pwdtmp
+    echo 'Ready to transfer working directory...'
+    printf ' >>> '
+    pwd
+
+    # seconds sleep counter
+    c=10
+
+    # temporary interrupt handler: skip sleep counter
+    pwdtrevoke() {
+        c=-1
+        echo "Skipping wait..."
+    }
+    trap pwdtrevoke INT
+
+    # loop till sleep is over
+    # yes this is a terrible hack but it'll do
+    while [[ $c -gt 0 ]]; do
+        sleep 1
+        if [[ $c -gt 0 && ! -f ~/.pwdtmp ]]; then
+            break
+        fi
+        (( c-- ))
+    done
+
+    # revert interrupt handler to previous state
+    trap - INT
+
+    # output result
+    if [[ -f ~/.pwdtmp ]]; then
+        rm ~/.pwdtmp
+        echo 'Transfer timed out.'
+        return 1
+    else
+        echo 'Transfer successful.'
+    fi
+}
+
+if [[ $- == *i* ]]; then
+    # auto transfer on interactive shell
+    if [[ -f ~/.pwdtmp ]]; then
+        PWDTMP="$(cat ~/.pwdtmp)"
+        echo "*** Working directory transfer received ***"
+        cd "$PWDTMP"
+        rm ~/.pwdtmp
+    fi
+fi
